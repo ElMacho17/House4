@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Admin - HouseF Systems</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        :root {
+            --primary: #1e3a8a; --accent: #facc15; --bg: #f8fafc;
+            --success: #22c55e; --warning: #f59e0b; --danger: #ef4444;
+            --glass: rgba(255, 255, 255, 0.9);
+        }
+
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
+
+        /* Header con Animación Suave */
+        .header { 
+            background: var(--primary); color: white; padding: 25px; border-radius: 20px; 
+            border-bottom: 6px solid var(--accent); margin-bottom: 30px; 
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 10px 25px -5px rgba(30, 58, 138, 0.3);
+            animation: slideInDown 0.6s ease-out;
+        }
+
+        @keyframes slideInDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* Tarjeta de Aula - Diseño Premium */
+        .aula-card { 
+            background: white; border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
+            margin-bottom: 30px; border: 1px solid #e2e8f0;
+            animation: fadeInScale 0.4s ease-out;
+        }
+
+        @keyframes fadeInScale { from { transform: scale(0.98); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .aula-header { 
+            padding: 20px 25px; border-bottom: 2px solid #f1f5f9;
+            display: flex; justify-content: space-between; align-items: center; 
+        }
+
+        /* Luces de Estado */
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 10px; position: relative; }
+        .status-active { background: var(--success); box-shadow: 0 0 12px var(--success); }
+        .status-busy { background: var(--warning); box-shadow: 0 0 12px var(--warning); }
+
+        .menu-dots { 
+            cursor: pointer; width: 40px; height: 40px; display: flex; 
+            align-items: center; justify-content: center; border-radius: 12px;
+            transition: 0.2s; background: #f1f5f9;
+        }
+        .menu-dots:hover { background: #e2e8f0; }
+
+        /* Tabla de Estudiantes */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 15px 25px; font-size: 0.75rem; text-transform: uppercase; color: #64748b; background: #f8fafc; }
+        td { padding: 18px 25px; border-bottom: 1px solid #f1f5f9; }
+
+        /* Indicadores de Permiso y Asistencia */
+        .badge-status { 
+            padding: 5px 12px; border-radius: 8px; font-size: 0.7rem; font-weight: bold; 
+            display: inline-flex; align-items: center; gap: 5px;
+        }
+        .badge-presente { background: #dcfce7; color: #166534; }
+        .badge-fuera { background: #fee2e2; color: #991b1b; }
+        .badge-proceso { background: #fef9c3; color: #854d0e; }
+
+        /* Switch Pro */
+        .label-switch { font-size: 0.7rem; font-weight: bold; display: block; margin-bottom: 5px; color: #475569; }
+        .switch { position: relative; display: inline-block; width: 46px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 34px; }
+        input:checked + .slider { background-color: var(--primary); }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        /* Botón Añadir */
+        .btn-add-st { 
+            width: calc(100% - 50px); margin: 20px 25px; padding: 12px; 
+            background: #f1f5f9; color: var(--primary); border: 2px dashed #cbd5e1;
+            border-radius: 12px; font-weight: bold; cursor: pointer; transition: 0.2s;
+        }
+        .btn-add-st:hover { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* Estilos para el Buscador del Modal */
+        .swal-search-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; border-radius: 8px;
+        }
+        .swal-search-item:hover { background: #f0f7ff; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h1 style="margin:0; letter-spacing: -1px;">ADMINISTRACIÓN CENTRAL</h1>
+            <div style="font-size: 0.8rem; opacity: 0.9;">Control de Asistencia • Hardy System v4.0</div>
+        </div>
+        <button onclick="crearAulaNueva()" style="background: var(--accent); border:none; padding: 12px 20px; border-radius: 12px; font-weight: 800; cursor: pointer;">+ NUEVA AULA</button>
+    </div>
+
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyApscrKxLaiulk0j3CuxtNr9u_fkLPozro",
+            authDomain: "housef-7f6df.firebaseapp.com",
+            projectId: "housef-7f6df",
+            storageBucket: "housef-7f6df.firebasestorage.app",
+            messagingSenderId: "634742667054",
+            appId: "1:634742667054:web:d06332cbaf838c55eaecbf"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let dataAlumnos = [];
+        let statusAulas = JSON.parse(localStorage.getItem('statusAulas') || '{}');
+
+        onSnapshot(collection(db, "mis_hermanos"), (snap) => {
+            dataAlumnos = [];
+            snap.forEach(d => dataAlumnos.push({ id: d.id, ...d.data() }));
+            render();
+        });
+
+        function render() {
+            const container = document.getElementById('app-container');
+            container.innerHTML = "";
+            const grupos = dataAlumnos.reduce((acc, curr) => {
+                const aula = curr.aula || "Sin Asignar";
+                if (!acc[aula]) acc[aula] = [];
+                acc[aula].push(curr);
+                return acc;
+            }, {});
+
+            Object.keys(grupos).forEach(nombre => {
+                const aulaStatus = statusAulas[nombre] || 'verde';
+                const card = document.createElement('div');
+                card.className = "aula-card";
+                card.innerHTML = `
+                    <div class="aula-header">
+                        <div>
+                            <span class="status-dot ${aulaStatus === 'verde' ? 'status-active' : 'status-busy'}"></span>
+                            <b style="text-transform: uppercase; letter-spacing: 1px;">${nombre}</b>
+                        </div>
+                        <div class="menu-dots" onclick="gestionarAula('${nombre}')">⋮</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr><th>Estudiante</th><th style="text-align:center">Estado</th><th style="text-align:right">Permiso</th></tr>
+                        </thead>
+                        <tbody>
+                            ${grupos[nombre].map(al => `
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 700;">${al.nombre}</div>
+                                        <div style="font-size: 0.7rem; color: #94a3b8;">${al.apellido || ''}</div>
+                                    </td>
+                                    <td align="center">
+                                        <span class="badge-status ${getBadgeClass(al.estado)}">${al.estado || 'Presente'}</span>
+                                    </td>
+                                    <td align="right">
+                                        <span class="label-switch">AUTORIZAR</span>
+                                        <label class="switch">
+                                            <input type="checkbox" ${al.estado === 'Permiso en Proceso' ? 'checked' : ''} 
+                                            onclick="togglePermiso('${al.id}', this.checked)">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <button class="btn-add-st" onclick="abrirBuscadorAlumnos('${nombre}')">+ AÑADIR O MOVER ESTUDIANTE</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function getBadgeClass(st) {
+            if (st === 'Presente') return 'badge-presente';
+            if (st === 'Permiso en Proceso') return 'badge-proceso';
+            return 'badge-fuera';
+        }
+
+        // --- LÓGICA DE GESTIÓN ---
+
+        window.gestionarAula = async (aula) => {
+            const { value: action } = await Swal.fire({
+                title: 'Gestión de Aula',
+                html: `
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button onclick="Swal.clickConfirm()" id="btn-renombrar" class="swal2-confirm swal2-styled" style="background: #3b82f6;">✏️ Renombrar Aula</button>
+                        <button onclick="document.getElementById('action-val').value='status';Swal.clickConfirm()" class="swal2-confirm swal2-styled" style="background: #f59e0b;">🚦 Cambiar Estado (Luz)</button>
+                        <button onclick="document.getElementById('action-val').value='borrar';Swal.clickConfirm()" class="swal2-confirm swal2-styled" style="background: #ef4444;">🗑️ Vaciar Aula</button>
+                    </div>
+                    <input type="hidden" id="action-val" value="edit">
+                `,
+                showConfirmButton: false,
+                showCloseButton: true
+            });
+
+            const selected = document.getElementById('action-val').value;
+            
+            if (selected === 'edit') {
+                const { value: nuevo } = await Swal.fire({ title: 'Nuevo Nombre', input: 'text' });
+                if (nuevo) {
+                    const batch = dataAlumnos.filter(a => a.aula === aula);
+                    for (let a of batch) await updateDoc(doc(db, "mis_hermanos", a.id), { aula: nuevo });
+                }
+            } else if (selected === 'status') {
+                statusAulas[aula] = statusAulas[aula] === 'verde' ? 'amarillo' : 'verde';
+                localStorage.setItem('statusAulas', JSON.stringify(statusAulas));
+                render();
+            } else if (selected === 'borrar') {
+                const batch = dataAlumnos.filter(a => a.aula === aula);
+                for (let a of batch) await updateDoc(doc(db, "mis_hermanos", a.id), { aula: "Sin Asignar" });
+            }
+        };
+
+        window.abrirBuscadorAlumnos = async (aulaDestino) => {
+            const listaHtml = dataAlumnos
+                .sort((a,b) => a.nombre.localeCompare(b.nombre))
+                .map(a => `<div class="swal-search-item" onclick="seleccionarParaMover('${a.id}', '${aulaDestino}')">
+                    <span><b>${a.nombre}</b> ${a.apellido || ''}</span>
+                    <small style="color: #64748b;">${a.aula || 'S/A'}</small>
+                </div>`).join('');
+
+            Swal.fire({
+                title: 'Buscar Estudiante',
+                html: `<div style="max-height: 300px; overflow-y: auto; text-align: left;">${listaHtml}</div>`,
+                showConfirmButton: false,
+                showCloseButton: true
+            });
+        };
+
+        window.seleccionarParaMover = async (id, aula) => {
+            await updateDoc(doc(db, "mis_hermanos", id), { aula: aula });
+            Swal.fire({ title: 'Movido', icon: 'success', timer: 800, showConfirmButton: false });
+        };
+
+        window.togglePermiso = async (id, check) => {
+            await updateDoc(doc(db, "mis_hermanos", id), { estado: check ? "Permiso en Proceso" : "Presente" });
+        };
+
+        window.crearAulaNueva = async () => {
+            const { value: nombre } = await Swal.fire({ title: 'Nombre de la Aula', input: 'text' });
+            if (nombre) {
+                Swal.fire('Aula Reservada', 'Mueve alumnos a esta aula para que aparezca en el panel.', 'success');
+            }
+        };
+    </script>
+</body>
+</html>
