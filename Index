@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Hardy - Gestión por Aulas</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        :root {
+            --blue: #1e3a8a; --yellow: #facc15; --bg: #f1f5f9;
+        }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+        
+        .header { background: var(--blue); color: white; padding: 20px; border-radius: 15px; border-bottom: 5px solid var(--yellow); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* Estilo de Aulas */
+        .aula-card { background: white; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px; overflow: hidden; border-left: 8px solid var(--blue); }
+        .aula-header { background: #e2e8f0; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: var(--blue); }
+
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; padding: 12px; text-align: left; font-size: 0.8rem; color: #64748b; }
+        td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
+
+        /* Switch Rápido (El "Cubo" de Permiso) */
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
+        input:checked + .slider { background-color: var(--yellow); }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .btn { padding: 6px 12px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.8rem; font-weight: bold; transition: 0.2s; }
+        .btn-edit { background: #dbeafe; color: var(--blue); margin-right: 5px; }
+        .btn-move { background: #fef9c3; color: #854d0e; }
+        .btn-add-aula { background: var(--yellow); color: var(--blue); padding: 10px 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h1 style="margin:0">Panel de Control Estudiantil</h1>
+            <span>Hardy System v3.0 - Gestión de Estudiantes</span>
+        </div>
+        <button class="btn btn-add-aula" onclick="crearAula()">+ Nueva Aula</button>
+    </div>
+
+    <div id="contenedorAulas">
+        <!-- Las aulas se cargan aquí -->
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyApscrKxLaiulk0j3CuxtNr9u_fkLPozro",
+            authDomain: "housef-7f6df.firebaseapp.com",
+            projectId: "housef-7f6df",
+            storageBucket: "housef-7f6df.firebasestorage.app",
+            messagingSenderId: "634742667054",
+            appId: "1:634742667054:web:d06332cbaf838c55eaecbf"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Escuchar datos de Firebase
+        onSnapshot(collection(db, "mis_hermanos"), (snapshot) => {
+            const alumnos = [];
+            snapshot.forEach(doc => alumnos.push({ id: doc.id, ...doc.data() }));
+            renderizarAulas(alumnos);
+        });
+
+        function renderizarAulas(alumnos) {
+            const container = document.getElementById('contenedorAulas');
+            container.innerHTML = "";
+
+            // Agrupar por aula
+            const aulas = {};
+            alumnos.forEach(a => {
+                const nombreAula = a.aula || "Sin Asignar";
+                if (!aulas[nombreAula]) aulas[nombreAula] = [];
+                aulas[nombreAula].push(a);
+            });
+
+            for (const nombre in aulas) {
+                const div = document.createElement('div');
+                div.className = "aula-card";
+                div.innerHTML = `
+                    <div class="aula-header">
+                        <span>AULA: ${nombre.toUpperCase()}</span>
+                        <small>${aulas[nombre].length} Estudiantes</small>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ESTUDIANTE</th>
+                                <th>PERMISO SALIDA</th>
+                                <th>ESTADO</th>
+                                <th>ACCIONES</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${aulas[nombre].map(alumno => `
+                                <tr>
+                                    <td><b>${alumno.nombre} ${alumno.apellido || ''}</b></td>
+                                    <td>
+                                        <label class="switch">
+                                            <input type="checkbox" ${alumno.estado === 'Permiso en Proceso' ? 'checked' : ''} 
+                                            onclick="togglePermisoRapido('${alumno.id}', this.checked)">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </td>
+                                    <td><small>${alumno.estado || 'Presente'}</small></td>
+                                    <td>
+                                        <button class="btn btn-edit" onclick="editarAlumno('${alumno.id}', '${alumno.nombre}', '${alumno.apellido || ''}')">Editar</button>
+                                        <button class="btn btn-move" onclick="moverAlumno('${alumno.id}', '${alumno.nombre}')">Mover</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        // --- FUNCIONES DE GESTIÓN ---
+
+        window.togglePermisoRapido = async (id, isChecked) => {
+            const nuevoEstado = isChecked ? "Permiso en Proceso" : "Presente";
+            await updateDoc(doc(db, "mis_hermanos", id), { estado: nuevoEstado });
+        };
+
+        window.editarAlumno = async (id, nombre, apellido) => {
+            const { value: formValues } = await Swal.fire({
+                title: 'Editar Estudiante',
+                html: `
+                    <input id="swal-input1" class="swal2-input" placeholder="Nombre" value="${nombre}">
+                    <input id="swal-input2" class="swal2-input" placeholder="Apellido" value="${apellido}">
+                `,
+                focusConfirm: false,
+                preConfirm: () => [
+                    document.getElementById('swal-input1').value,
+                    document.getElementById('swal-input2').value
+                ]
+            });
+            if (formValues) {
+                await updateDoc(doc(db, "mis_hermanos", id), { nombre: formValues[0], apellido: formValues[1] });
+            }
+        };
+
+        window.moverAlumno = async (id, nombre) => {
+            const { value: aulaDestino } = await Swal.fire({
+                title: `Mover a ${nombre}`,
+                input: 'text',
+                inputLabel: 'Escribe el nombre del aula destino',
+                inputPlaceholder: 'Ej: Aula 2, Sistemas, etc.'
+            });
+            if (aulaDestino) {
+                await updateDoc(doc(db, "mis_hermanos", id), { aula: aulaDestino });
+            }
+        };
+
+        window.crearAula = () => {
+            Swal.fire('Info', 'Para crear un aula, mueve a un estudiante a un nombre de aula nuevo.', 'info');
+        };
+    </script>
+</body>
+</html>
